@@ -1,0 +1,16 @@
+Bundled sample leaf images — sources & licensing
+=================================================
+
+These images are used only as zero-setup demo inputs for the classifier.
+They were downloaded from Wikimedia Commons (publicly licensed).
+
+1. sample_leaf_tomato_late_blight.jpg
+   "Late blight on tomato leaf" — Wikimedia Commons
+   https://commons.wikimedia.org/wiki/File:Late_blight_on_tomato_leaf_(7871756748).jpg
+
+2. sample_leaf_potato_late_blight.jpg
+   "Late blight on potato leaf 2" — Wikimedia Commons
+   https://commons.wikimedia.org/wiki/File:Late_blight_on_potato_leaf_2.jpg
+
+Please consult the file pages above for the exact license and attribution
+terms. Replace or remove these samples freely; the app also accepts uploads.

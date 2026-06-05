@@ -1,0 +1,6 @@
+streamlit==1.40.2
+transformers==4.46.3
+torch==2.5.1
+pillow==11.0.0
+# Optional Gemini multilingual rewrite uses the REST API via requests (no SDK).
+requests==2.32.3

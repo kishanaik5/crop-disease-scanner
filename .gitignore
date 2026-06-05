@@ -1,0 +1,23 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Model / HF caches
+.cache/
+~/.cache/huggingface/
+hf_cache/
+*.log
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
