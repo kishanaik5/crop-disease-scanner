@@ -81,12 +81,13 @@ if image is None:
     st.info("Upload a leaf photo (or pick a sample) from the sidebar to begin.")
     st.stop()
 
-# ------------------------------- Classify -----------------------------------
-left, right = st.columns([1, 1.4])
-with left:
-    st.subheader("Input image")
-    st.image(image, use_container_width=True)
+# Reset any cached bounding-box overlay when the input image changes.
+img_sig = uploaded.name if uploaded is not None else str(sample_choice)
+if st.session_state.get("img_sig") != img_sig:
+    st.session_state["img_sig"] = img_sig
+    st.session_state["boxed_image"] = None
 
+# ------------------------------- Classify -----------------------------------
 try:
     predictions = classify(image, top_k=3)
 except RuntimeError as exc:
@@ -94,6 +95,32 @@ except RuntimeError as exc:
     st.stop()
 
 adv = build_advisory(predictions, kb=load_kb())
+
+left, right = st.columns([1, 1.4])
+with left:
+    st.subheader("Input image")
+    if st.session_state.get("boxed_image") is not None:
+        st.image(st.session_state["boxed_image"], use_container_width=True,
+                 caption="Affected regions detected by Gemini")
+    else:
+        st.image(image, use_container_width=True)
+
+    if gemini_key and not adv.healthy:
+        if st.button("🔍 Highlight affected regions (Gemini)"):
+            from services.detection import detect_disease_boxes, draw_boxes
+
+            try:
+                with st.spinner("Detecting lesions…"):
+                    boxes = detect_disease_boxes(gemini_key, image, adv.label)
+                if boxes:
+                    st.session_state["boxed_image"] = draw_boxes(image, boxes)
+                    st.rerun()
+                else:
+                    st.info("No distinct lesions located — the whole leaf may be affected.")
+            except RuntimeError as exc:
+                st.warning(str(exc))
+    elif not gemini_key:
+        st.caption("💡 Add a Gemini key in the sidebar to highlight affected regions.")
 
 with right:
     st.subheader("Top-3 predictions")

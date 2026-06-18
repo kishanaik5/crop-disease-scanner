@@ -26,6 +26,8 @@ prevention) — with an optional multilingual, farmer-friendly rewrite.
 - **Reasoning rules:** low confidence → surface top-3 + advise expert confirmation;
   healthy leaf → monitoring tips instead of treatment.
 - **Optional** Gemini rewrite of the advisory in an Indian language.
+- **Optional** Gemini-vision **bounding-box overlay** highlighting the affected
+  leaf regions for the predicted disease.
 
 ## Architecture (pipeline)
 
