@@ -136,6 +136,9 @@ async def scan_stream(
                 if disease_info.get("cause"):
                     prevention = f"Cause: {disease_info['cause']}\nSpread: {disease_info.get('disease_spread', '')}"
 
+                if is_healthy:
+                    chemical = ""
+
                 result_data = {
                     "crop": detected_plant,
                     "scientific_name": plant_info.get("scientific_name", ""),
@@ -146,8 +149,7 @@ async def scan_stream(
                     "mismatch": is_mismatch,
                     "confidence": 98.0,
                     "predictions": [
-                        {"label": f"{detected_plant} · {detected_disease} (Gemini AI)", "confidence": 98.0},
-                        {"label": f"PlantVillage CNN: {predictions[0][0]}", "confidence": round(predictions[0][1] * 100, 1)}
+                        {"label": f"{detected_plant} · {detected_disease}", "confidence": 98.0}
                     ],
                     "symptoms": symptoms,
                     "organic_treatment": organic,

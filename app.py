@@ -206,8 +206,8 @@ with right:
 
         st.dataframe(
             {
-                "Diagnosis Source": [f"Gemini Pathologist: {display_crop} · {display_disease}"] + [f"PlantVillage CNN: {p[0]}" for p in predictions],
-                "Confidence": ["98.0%"] + [f"{p[1]:.1%}" for p in predictions]
+                "Diagnosis Source": [f"Gemini Pathologist: {display_crop} · {display_disease}"],
+                "Confidence": ["98.0%"]
             },
             use_container_width=True, hide_index=True,
         )
