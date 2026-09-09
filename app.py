@@ -56,6 +56,14 @@ with st.sidebar:
     gemini_key = get_gemini_api_key(ui_key)
 
     st.divider()
+    submit_clicked = st.button(
+        "🔬 Diagnose Leaf & Generate Advisory",
+        type="primary",
+        use_container_width=True,
+        help="Run MobileNetV2 and Gemini Multimodal Pathologist analysis"
+    )
+
+    st.divider()
     with st.expander("ℹ️ How it works"):
         st.markdown(
             """
@@ -87,11 +95,26 @@ if image is None:
     st.info("Upload a leaf photo (or pick a sample) from the sidebar to begin.")
     st.stop()
 
-# Reset any cached bounding-box overlay when the input image changes.
+# Reset any cached bounding-box overlay and analysis state when the input image changes.
 img_sig = uploaded.name if uploaded is not None else str(sample_choice)
 if st.session_state.get("img_sig") != img_sig:
     st.session_state["img_sig"] = img_sig
     st.session_state["boxed_image"] = None
+    st.session_state["diagnosed"] = False
+
+if submit_clicked:
+    st.session_state["diagnosed"] = True
+
+if not st.session_state.get("diagnosed", False):
+    st.subheader("Selected leaf preview")
+    st.image(image, use_container_width=True, caption=f"Ready for diagnosis (Claimed crop: {crop_name or 'Unspecified'})")
+    c_btn, _ = st.columns([1, 1])
+    with c_btn:
+        if st.button("🔬 Run Diagnosis Now", type="primary", use_container_width=True, key="main_run_btn"):
+            st.session_state["diagnosed"] = True
+            st.rerun()
+    st.info("👈 Review your claimed crop name and language in the sidebar, then click **Diagnose Leaf & Generate Advisory** to start.")
+    st.stop()
 
 # ------------------------------- Classify -----------------------------------
 try:
