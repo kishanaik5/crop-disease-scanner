@@ -14,7 +14,7 @@ import requests
 
 _BASE = "https://generativelanguage.googleapis.com/v1beta"
 _TIMEOUT = 30
-_PREFERRED = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-flash-latest"]
+_PREFERRED = ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-flash-latest"]
 
 
 @lru_cache(maxsize=4)
@@ -39,7 +39,7 @@ def _resolve_model(api_key: str) -> str:
             return sorted(available)[0]
     except requests.exceptions.RequestException:
         pass
-    return _PREFERRED[0]  # best-effort default; generateContent will report errors
+    return _PREFERRED[0]
 
 
 def rewrite_advisory(api_key: str, advisory_text: str, language: str) -> str:
@@ -56,7 +56,9 @@ def rewrite_advisory(api_key: str, advisory_text: str, language: str) -> str:
     Raises:
         RuntimeError: on API/network failure, with a user-friendly message.
     """
-    model = _resolve_model(api_key)
+    primary_model = _resolve_model(api_key)
+    models_to_try = [primary_model] + [m for m in _PREFERRED if m != primary_model]
+
     prompt = (
         f"You are an agricultural extension officer advising a smallholder farmer. "
         f"Rewrite the crop-disease advisory below in {language}, in simple, "
@@ -65,17 +67,23 @@ def rewrite_advisory(api_key: str, advisory_text: str, language: str) -> str:
         f"Be concise and practical. Do not invent facts beyond the advisory.\n\n"
         f"--- ADVISORY ---\n{advisory_text}"
     )
-    try:
-        resp = requests.post(
-            f"{_BASE}/models/{model}:generateContent",
-            params={"key": api_key},
-            json={"contents": [{"parts": [{"text": prompt}]}]},
-            timeout=_TIMEOUT,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        return data["candidates"][0]["content"]["parts"][0]["text"].strip()
-    except requests.exceptions.RequestException as exc:
-        raise RuntimeError(f"Gemini request failed: {exc}") from exc
-    except (KeyError, IndexError) as exc:
-        raise RuntimeError("Gemini returned an unexpected response.") from exc
+
+    last_err = None
+    for model in models_to_try:
+        try:
+            resp = requests.post(
+                f"{_BASE}/models/{model}:generateContent",
+                params={"key": api_key},
+                json={"contents": [{"parts": [{"text": prompt}]}]},
+                timeout=_TIMEOUT,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+        except requests.exceptions.RequestException as exc:
+            last_err = exc
+            continue
+        except (KeyError, IndexError) as exc:
+            raise RuntimeError("Gemini returned an unexpected response.") from exc
+
+    raise RuntimeError(f"Gemini request failed: {last_err}")
