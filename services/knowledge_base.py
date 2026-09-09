@@ -49,11 +49,14 @@ def _lookup(kb: Dict[str, dict], label: str) -> Optional[dict]:
 
 
 def build_advisory(
-    predictions: List[Tuple[str, float]], kb: Optional[Dict[str, dict]] = None
+    predictions: List[Tuple[str, float]],
+    kb: Optional[Dict[str, dict]] = None,
+    crop_hint: Optional[str] = None,
 ) -> Advisory:
     """Assemble an advisory from ranked ``(label, confidence)`` predictions.
 
     Reasoning rules:
+      * If ``crop_hint`` is provided, prioritize matching predictions from the same crop.
       * If the top-1 confidence is below the threshold, add a note advising the
         user to compare the top-3 and confirm with an expert.
       * If the top prediction is a 'healthy' class, return monitoring tips rather
@@ -66,11 +69,23 @@ def build_advisory(
         raise ValueError("No predictions to build an advisory from.")
     kb = kb or load_kb()
     top_label, top_conf = predictions[0]
+
+    # If the user specified a crop name, prioritize any candidate from that crop family
+    if crop_hint and crop_hint.strip():
+        hint_clean = crop_hint.strip().lower()
+        for cand_label, cand_conf in predictions:
+            cand_entry = _lookup(kb, cand_label)
+            cand_crop = (cand_entry.get("crop", "") if cand_entry else "").lower()
+            if hint_clean in cand_crop or hint_clean in cand_label.lower():
+                top_label, top_conf = cand_label, cand_conf
+                break
+
     entry = _lookup(kb, top_label)
 
     if entry is None:  # label not in KB — degrade gracefully
+        resolved_crop = crop_hint.strip().title() if crop_hint and crop_hint.strip() else "Unknown"
         return Advisory(
-            label=top_label, crop="Unknown", healthy=False, confidence=top_conf,
+            label=top_label, crop=resolved_crop, healthy=False, confidence=top_conf,
             symptoms="Not in the knowledge base.", likely_cause="Unknown.",
             organic_treatment="Consult a local agronomist for identification.",
             chemical_treatment="Consult a local agronomist before applying chemicals.",
@@ -89,8 +104,9 @@ def build_advisory(
     else:
         note = f"Top match with {top_conf:.0%} confidence."
 
+    resolved_crop = entry.get("crop") or (crop_hint.strip().title() if crop_hint and crop_hint.strip() else "Unknown")
     return Advisory(
-        label=top_label, crop=entry.get("crop", "Unknown"), healthy=healthy,
+        label=top_label, crop=resolved_crop, healthy=healthy,
         confidence=top_conf, symptoms=entry.get("symptoms", ""),
         likely_cause=entry.get("likely_cause", ""),
         organic_treatment=entry.get("organic_treatment", ""),

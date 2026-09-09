@@ -40,6 +40,12 @@ with st.sidebar:
         if pick != "— none —":
             sample_choice = os.path.join(DATA_DIR, pick)
 
+    crop_name = st.text_input(
+        "Crop name (optional)",
+        placeholder="e.g. Tomato, Potato, Apple, Corn...",
+        help="Optional: specify crop to refine disease diagnosis and personalized advice."
+    )
+
     language = st.selectbox("Advisory language", options=LANGUAGES, index=0)
 
     st.divider()
@@ -94,7 +100,7 @@ except RuntimeError as exc:
     st.error(str(exc))
     st.stop()
 
-adv = build_advisory(predictions, kb=load_kb())
+adv = build_advisory(predictions, kb=load_kb(), crop_hint=crop_name)
 
 left, right = st.columns([1, 1.4])
 with left:
@@ -137,7 +143,7 @@ st.subheader(f"{'Monitoring' if adv.healthy else 'Treatment'} advisory — {adv.
 if gemini_key and language != "English":
     try:
         with st.spinner(f"Rewriting in {language}…"):
-            rewritten = rewrite_advisory(gemini_key, advisory_to_text(adv), language)
+            rewritten = rewrite_advisory(gemini_key, advisory_to_text(adv), language, crop=crop_name or adv.crop, image=image)
         st.markdown(rewritten)
         st.caption("✨ Rewritten by Gemini. Structured cards below are the source advice.")
     except RuntimeError as exc:

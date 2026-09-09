@@ -52,14 +52,17 @@ def health():
 async def scan_stream(
     file: Optional[UploadFile] = File(None),
     preset: Optional[str] = Form(None),
+    crop: Optional[str] = Form(None),
     language: str = Form("English"),
     gemini_key: Optional[str] = Form(None),
     x_gemini_key: Optional[str] = Header(None, alias="X-Gemini-Key"),
 ):
     resolved_key = x_gemini_key or gemini_key or get_gemini_api_key()
+    crop_name = crop.strip() if crop and crop.strip() else None
 
     async def generator() -> AsyncGenerator[str, None]:
-        yield format_sse("log", make_log("API", f"POST /scan/stream language='{language}'"))
+        crop_info = f" crop='{crop_name}'" if crop_name else ""
+        yield format_sse("log", make_log("API", f"POST /scan/stream{crop_info} language='{language}'"))
         await asyncio.sleep(0.1)
 
         try:
@@ -88,9 +91,9 @@ async def scan_stream(
             predictions = classify(image, top_k=3)
             yield format_sse("log", make_log("Inference", f"Top match: '{predictions[0][0]}' ({predictions[0][1] * 100:.1f}%)", "success"))
 
-            yield format_sse("log", make_log("Knowledge", "Querying agronomic treatment protocols (disease_kb.json)..."))
+            yield format_sse("log", make_log("Knowledge", f"Querying agronomic treatment protocols (disease_kb.json){' for ' + crop_name if crop_name else ''}..."))
             kb = load_kb()
-            adv = build_advisory(predictions, kb=kb)
+            adv = build_advisory(predictions, kb=kb, crop_hint=crop_name)
 
             symptoms = adv.symptoms
             organic = adv.organic_treatment
@@ -99,9 +102,9 @@ async def scan_stream(
 
             rewritten_advisory = None
             if resolved_key:
-                yield format_sse("log", make_log("GenAI", f"Synthesizing {language} advisory via Gemini LLM...", "normal"))
+                yield format_sse("log", make_log("GenAI", f"Synthesizing {language} advisory via Gemini LLM{' for ' + adv.crop if adv.crop else ''}...", "normal"))
                 try:
-                    rewritten_advisory = rewrite_advisory(resolved_key, advisory_to_text(adv), language)
+                    rewritten_advisory = rewrite_advisory(resolved_key, advisory_to_text(adv), language, crop=crop_name or adv.crop, image=image)
                     yield format_sse("log", make_log("GenAI", f"Synthesized verified advisory in {language}", "success"))
                 except Exception as ex:
                     yield format_sse("log", make_log("GenAI", f"LLM note: {ex}", "warn"))
