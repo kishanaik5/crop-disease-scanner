@@ -140,14 +140,14 @@ with right:
 st.divider()
 st.subheader(f"{'Monitoring' if adv.healthy else 'Treatment'} advisory — {adv.crop}")
 
-if gemini_key and language != "English":
+if gemini_key:
     try:
-        with st.spinner(f"Rewriting in {language}…"):
+        with st.spinner(f"Generating expert plant pathology diagnosis in {language}…"):
             rewritten = rewrite_advisory(gemini_key, advisory_to_text(adv), language, crop=crop_name or adv.crop, image=image)
         st.markdown(rewritten)
-        st.caption("✨ Rewritten by Gemini. Structured cards below are the source advice.")
+        st.caption("✨ Diagnosed & synthesized by Gemini Multimodal Pathologist.")
     except RuntimeError as exc:
-        st.warning(f"{exc} Showing the knowledge-base advisory instead.")
+        st.warning(f"{exc} Showing the baseline knowledge-base advisory instead.")
 
 c1, c2 = st.columns(2)
 with c1:

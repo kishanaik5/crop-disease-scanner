@@ -17,7 +17,7 @@ import requests
 
 _BASE = "https://generativelanguage.googleapis.com/v1beta"
 _TIMEOUT = 30
-_PREFERRED = ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-flash-latest"]
+_PREFERRED = ["gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.5-flash", "gemini-flash-latest"]
 
 
 @lru_cache(maxsize=4)
@@ -45,13 +45,65 @@ def _resolve_model(api_key: str) -> str:
     return _PREFERRED[0]
 
 
+class AdvisoryResult(str):
+    """String subclass that carries parsed structured pathology data."""
+
+    parsed: dict = {}
+
+
+def format_advisory_markdown(parsed: dict) -> str:
+    """Render the structured pathology JSON into clean, farmer-friendly markdown."""
+    plant = parsed.get("plant_info", {})
+    disease = parsed.get("disease_info", {})
+    mgmt = parsed.get("management", {})
+
+    plant_common = plant.get("common_name", "Plant")
+    plant_sci = plant.get("scientific_name", "")
+    disease_common = disease.get("common_name", "Undetermined")
+    disease_sci = disease.get("scientific_name", "")
+    pathogen_type = disease.get("pathogen_type", "Pathogen")
+    severity = disease.get("severity", "Moderate")
+    cause = disease.get("cause", "Etiology under review.")
+    symptoms = disease.get("symptoms", "Leaf lesions or discoloration.")
+    spread = disease.get("disease_spread", "Airborne, water splash, or seedborne transmission.")
+    organic = mgmt.get("organic_practices", [])
+    chemical = mgmt.get("chemical_practices", [])
+
+    sci_badge = f" (*{plant_sci}*)" if plant_sci and "MISMATCH" not in plant_sci else f" — **{plant_sci}**" if plant_sci else ""
+    disease_sci_badge = f" (*{disease_sci}*)" if disease_sci else ""
+    org_md = "\n".join(f"* {p}" for p in organic) if organic else "* Practice proper spacing, clean cultivation, and drip irrigation."
+    chem_md = "\n".join(f"* **{c}**" for c in chemical) if chemical else "* Consult local agricultural extension officers for registered active ingredients."
+
+    return (
+        f"### **Plant Pathology Diagnosis & Agricultural Advisory**\n\n"
+        f"---\n\n"
+        f"### **1. Plant & Disease Identification**\n"
+        f"* **Host Plant:** {plant_common}{sci_badge}\n"
+        f"* **Disease Diagnosis:** **{disease_common}**{disease_sci_badge}\n"
+        f"* **Pathogen Type:** {pathogen_type} (Severity: {severity})\n\n"
+        f"---\n\n"
+        f"### **2. Symptoms & Cause**\n"
+        f"* **Symptoms:** {symptoms}\n"
+        f"* **Underlying Cause:** {cause}\n\n"
+        f"---\n\n"
+        f"### **3. How the Disease Spreads**\n"
+        f"* {spread}\n\n"
+        f"---\n\n"
+        f"### **4. Integrated Disease Management (IDM) Advisory**\n\n"
+        f"#### **A. Organic & Biological Practices**\n"
+        f"{org_md}\n\n"
+        f"#### **B. Chemical Control (Active Ingredients Only)**\n"
+        f"{chem_md}"
+    )
+
+
 def rewrite_advisory(
     api_key: str,
     advisory_text: str,
     language: str,
     crop: Optional[str] = None,
     image: Optional[Image.Image] = None,
-) -> str:
+) -> AdvisoryResult:
     """Perform expert plant pathology analysis and farmer-friendly advisory generation.
 
     Args:
@@ -62,7 +114,7 @@ def rewrite_advisory(
         image: optional PIL Image of the leaf for multimodal vision analysis.
 
     Returns:
-        The comprehensive diagnosis and advisory text.
+        AdvisoryResult (str) containing formatted markdown and parsed JSON dictionary in ``.parsed``.
 
     Raises:
         RuntimeError: on API/network failure, with a user-friendly message.
@@ -99,8 +151,31 @@ Primary Objectives:
    - Organic & biological practices
    - Chemical practices (active ingredients only)
 
---- REFERENCE DIAGNOSTIC BASELINE ---
-{advisory_text}"""
+Output Rules:
+- STRICT JSON ONLY
+- No markdown
+- No extra text
+
+JSON FORMAT:
+{{
+    "plant_info": {{
+        "common_name": "",
+        "scientific_name": ""
+    }},
+    "disease_info": {{
+        "common_name": "",
+        "scientific_name": "",
+        "pathogen_type": "",
+        "cause": "",
+        "symptoms": "",
+        "disease_spread": "",
+        "severity": ""
+    }},
+    "management": {{
+        "organic_practices": [],
+        "chemical_practices": []
+    }}
+}}"""
 
     parts = []
     if image is not None:
@@ -127,16 +202,46 @@ Primary Objectives:
             resp = requests.post(
                 f"{_BASE}/models/{model}:generateContent",
                 params={"key": api_key},
-                json={"contents": [{"parts": parts}]},
+                json={
+                    "contents": [{"parts": parts}],
+                    "generationConfig": {"response_mime_type": "application/json"},
+                },
                 timeout=_TIMEOUT,
             )
             resp.raise_for_status()
             data = resp.json()
-            return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+            raw_text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+
+            clean = raw_text
+            if clean.startswith("```json"):
+                clean = clean[7:]
+            elif clean.startswith("```"):
+                clean = clean[3:]
+            if clean.endswith("```"):
+                clean = clean[:-3]
+            clean = clean.strip()
+
+            parsed = {}
+            try:
+                import json
+                parsed = json.loads(clean)
+            except Exception:
+                import json
+                import re
+                m = re.search(r"(\{[\s\S]*\})", clean)
+                if m:
+                    parsed = json.loads(m.group(1))
+
+            formatted_md = format_advisory_markdown(parsed) if parsed else raw_text
+            res = AdvisoryResult(formatted_md)
+            res.parsed = parsed
+            return res
+
         except requests.exceptions.RequestException as exc:
             last_err = exc
             continue
         except (KeyError, IndexError) as exc:
-            raise RuntimeError("Gemini returned an unexpected response.") from exc
+            last_err = exc
+            continue
 
     raise RuntimeError(f"Gemini request failed: {last_err}")
