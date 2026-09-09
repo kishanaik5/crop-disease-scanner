@@ -15,7 +15,13 @@ from PIL import Image
 from services.advisory import rewrite_advisory
 from services.classifier import classify
 from services.knowledge_base import advisory_to_text, build_advisory, load_kb
-from utils.config import LANGUAGES, get_gemini_api_key
+from services.gemini_client import get_gemini_api_key
+
+def safe_image(img, **kwargs):
+    try:
+        st.image(img, use_container_width=True, **kwargs)
+    except TypeError:
+        st.image(img, use_column_width=True, **kwargs)
 
 st.set_page_config(page_title="Crop Disease Scanner", page_icon="🩺", layout="wide")
 
@@ -107,7 +113,7 @@ if submit_clicked:
 
 if not st.session_state.get("diagnosed", False):
     st.subheader("Selected leaf preview")
-    st.image(image, use_container_width=True, caption=f"Ready for diagnosis (Claimed crop: {crop_name or 'Unspecified'})")
+    safe_image(image, caption=f"Ready for diagnosis (Claimed crop: {crop_name or 'Unspecified'})")
     c_btn, _ = st.columns([1, 1])
     with c_btn:
         if st.button("🔬 Run Diagnosis Now", type="primary", use_container_width=True, key="main_run_btn"):
@@ -167,10 +173,10 @@ left, right = st.columns([1, 1.4])
 with left:
     st.subheader("Input image")
     if st.session_state.get("boxed_image") is not None:
-        st.image(st.session_state["boxed_image"], use_container_width=True,
-                 caption="Affected regions detected by Gemini")
+        safe_image(st.session_state["boxed_image"],
+                   caption="Affected regions detected by Gemini")
     else:
-        st.image(image, use_container_width=True)
+        safe_image(image)
 
     if gemini_key and not is_healthy:
         if st.button("🔍 Highlight affected regions (Gemini)"):
