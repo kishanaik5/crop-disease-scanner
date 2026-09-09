@@ -14,8 +14,7 @@ import requests
 
 _BASE = "https://generativelanguage.googleapis.com/v1beta"
 _TIMEOUT = 30
-# Preference order; the first available model supporting generateContent is used.
-_PREFERRED = ["gemini-2.5-flash", "gemini-flash-latest", "gemini-2.0-flash", "gemini-1.5-flash"]
+_PREFERRED = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-flash-latest"]
 
 
 @lru_cache(maxsize=4)

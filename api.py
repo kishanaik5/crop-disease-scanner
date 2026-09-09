@@ -16,7 +16,7 @@ from PIL import Image
 
 from services.advisory import rewrite_advisory
 from services.classifier import classify
-from services.knowledge_base import build_advisory, load_kb
+from services.knowledge_base import advisory_to_text, build_advisory, load_kb
 from utils.config import get_gemini_api_key
 
 app = FastAPI(title="Crop Disease Scanner API", version="1.0.0")
@@ -97,14 +97,16 @@ async def scan_stream(
             chemical = adv.chemical_treatment
             prevention = adv.prevention
 
-            if resolved_key and language.lower() != "english":
+            rewritten_advisory = None
+            if resolved_key:
                 yield format_sse("log", make_log("GenAI", f"Synthesizing {language} advisory via Gemini LLM...", "normal"))
                 try:
-                    raw_text = f"Symptoms: {symptoms}\nOrganic: {organic}\nChemical: {chemical}\nPrevention: {prevention}"
-                    rewrite_advisory(raw_text, crop=adv.crop, disease=adv.label, language=language, api_key=resolved_key)
+                    rewritten_advisory = rewrite_advisory(resolved_key, advisory_to_text(adv), language)
                     yield format_sse("log", make_log("GenAI", f"Synthesized verified advisory in {language}", "success"))
                 except Exception as ex:
                     yield format_sse("log", make_log("GenAI", f"LLM note: {ex}", "warn"))
+            else:
+                yield format_sse("log", make_log("GenAI", "No Gemini API key supplied; utilizing built-in agronomic knowledge base.", "warn"))
 
             yield format_sse("log", make_log("Pipeline", "Diagnosis and treatment generation complete. Status 200 OK.", "success"))
 
@@ -118,6 +120,7 @@ async def scan_stream(
                 "organic_treatment": organic,
                 "chemical_treatment": chemical,
                 "prevention": prevention,
+                "rewritten_advisory": rewritten_advisory,
                 "language": language,
                 "note": adv.note,
             }
