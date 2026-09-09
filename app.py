@@ -15,7 +15,7 @@ from PIL import Image
 from services.advisory import rewrite_advisory
 from services.classifier import classify
 from services.knowledge_base import advisory_to_text, build_advisory, load_kb
-from services.gemini_client import get_gemini_api_key
+from utils.config import LANGUAGES, get_gemini_api_key
 
 def safe_image(img, **kwargs):
     try:
