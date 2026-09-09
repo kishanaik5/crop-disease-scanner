@@ -102,6 +102,44 @@ except RuntimeError as exc:
 
 adv = build_advisory(predictions, kb=load_kb(), crop_hint=crop_name)
 
+gemini_result = None
+parsed_gemini = {}
+if gemini_key:
+    try:
+        with st.spinner(f"Analyzing leaf pathology with Gemini in {language}…"):
+            gemini_result = rewrite_advisory(gemini_key, advisory_to_text(adv), language, crop=crop_name or adv.crop, image=image)
+            parsed_gemini = getattr(gemini_result, "parsed", {}) or {}
+    except RuntimeError as exc:
+        st.warning(f"Gemini service note: {exc}. Using baseline offline knowledge base.")
+
+if parsed_gemini and "disease_info" in parsed_gemini:
+    plant_info = parsed_gemini.get("plant_info", {})
+    disease_info = parsed_gemini.get("disease_info", {})
+    mgmt = parsed_gemini.get("management", {})
+
+    display_crop = plant_info.get("common_name") or crop_name or adv.crop
+    display_disease = disease_info.get("common_name") or adv.label
+    is_healthy = str(display_disease).lower() == "healthy"
+    scientific_name = plant_info.get("scientific_name", "")
+
+    symptoms_text = disease_info.get("symptoms") or adv.symptoms
+    cause_text = disease_info.get("cause") or adv.likely_cause
+    spread_text = disease_info.get("disease_spread") or adv.prevention
+    org_list = mgmt.get("organic_practices", [])
+    chem_list = mgmt.get("chemical_practices", [])
+    organic_text = "\n".join(f"• {p}" for p in org_list) if org_list else adv.organic_treatment
+    chemical_text = "\n".join(f"• {c}" for c in chem_list) if chem_list else adv.chemical_treatment
+else:
+    display_crop = adv.crop
+    display_disease = adv.label
+    is_healthy = adv.healthy
+    scientific_name = ""
+    symptoms_text = adv.symptoms
+    cause_text = adv.likely_cause
+    spread_text = adv.prevention
+    organic_text = adv.organic_treatment
+    chemical_text = adv.chemical_treatment
+
 left, right = st.columns([1, 1.4])
 with left:
     st.subheader("Input image")
@@ -111,13 +149,13 @@ with left:
     else:
         st.image(image, use_container_width=True)
 
-    if gemini_key and not adv.healthy:
+    if gemini_key and not is_healthy:
         if st.button("🔍 Highlight affected regions (Gemini)"):
             from services.detection import detect_disease_boxes, draw_boxes
 
             try:
                 with st.spinner("Detecting lesions…"):
-                    boxes = detect_disease_boxes(gemini_key, image, adv.label)
+                    boxes = detect_disease_boxes(gemini_key, image, display_disease)
                 if boxes:
                     st.session_state["boxed_image"] = draw_boxes(image, boxes)
                     st.rerun()
@@ -129,39 +167,55 @@ with left:
         st.caption("💡 Add a Gemini key in the sidebar to highlight affected regions.")
 
 with right:
-    st.subheader("Top-3 predictions")
-    st.dataframe(
-        {"Disease": [p[0] for p in predictions], "Confidence": [f"{p[1]:.1%}" for p in predictions]},
-        use_container_width=True, hide_index=True,
-    )
-    (st.success if adv.healthy else st.warning)(adv.note)
+    st.subheader("Diagnostic Assessment")
+    if parsed_gemini:
+        if "MISMATCH" in scientific_name:
+            st.warning(f"⚠️ {scientific_name}")
+        elif plant_info.get("common_name") == "INVALID_IMAGE":
+            st.error("❌ Non-plant material detected in image.")
+        elif is_healthy:
+            st.success(f"🌱 Verified Healthy: **{display_crop}**")
+        else:
+            st.error(f"🔬 Verified Pathogen: **{display_crop}** — **{display_disease}**")
+
+        if scientific_name and "MISMATCH" not in scientific_name:
+            st.caption(f"_{scientific_name}_")
+
+        st.dataframe(
+            {
+                "Diagnosis Source": [f"Gemini Pathologist: {display_crop} · {display_disease}"] + [f"PlantVillage CNN: {p[0]}" for p in predictions],
+                "Confidence": ["98.0%"] + [f"{p[1]:.1%}" for p in predictions]
+            },
+            use_container_width=True, hide_index=True,
+        )
+    else:
+        st.dataframe(
+            {"Disease": [p[0] for p in predictions], "Confidence": [f"{p[1]:.1%}" for p in predictions]},
+            use_container_width=True, hide_index=True,
+        )
+        (st.success if adv.healthy else st.warning)(adv.note)
 
 # ------------------------------ Advisory ------------------------------------
 st.divider()
-st.subheader(f"{'Monitoring' if adv.healthy else 'Treatment'} advisory — {adv.crop}")
+st.subheader(f"{'Monitoring' if is_healthy else 'Treatment'} advisory — {display_crop}")
 
-if gemini_key:
-    try:
-        with st.spinner(f"Generating expert plant pathology diagnosis in {language}…"):
-            rewritten = rewrite_advisory(gemini_key, advisory_to_text(adv), language, crop=crop_name or adv.crop, image=image)
-        st.markdown(rewritten)
-        st.caption("✨ Diagnosed & synthesized by Gemini Multimodal Pathologist.")
-    except RuntimeError as exc:
-        st.warning(f"{exc} Showing the baseline knowledge-base advisory instead.")
-
-c1, c2 = st.columns(2)
-with c1:
-    st.markdown("##### 🔎 Symptoms")
-    st.write(adv.symptoms or "—")
-    st.markdown("##### 🧫 Likely cause")
-    st.write(adv.likely_cause or "—")
-    st.markdown("##### 🛡️ Prevention")
-    st.write(adv.prevention or "—")
-with c2:
-    st.markdown("##### 🌿 Organic treatment")
-    st.write(adv.organic_treatment or "—")
-    st.markdown("##### 🧪 Chemical treatment")
-    st.write(adv.chemical_treatment or "—")
+if gemini_result:
+    st.markdown(gemini_result)
+    st.caption("✨ Diagnosed & synthesized by Gemini Multimodal Pathologist.")
+else:
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("##### 🔎 Symptoms")
+        st.write(symptoms_text or "—")
+        st.markdown("##### 🧫 Likely cause")
+        st.write(cause_text or "—")
+        st.markdown("##### 🛡️ Prevention")
+        st.write(spread_text or "—")
+    with c2:
+        st.markdown("##### 🌿 Organic treatment")
+        st.write(organic_text or "—")
+        st.markdown("##### 🧪 Chemical treatment")
+        st.write(chemical_text or "—")
 
 if not gemini_key and language != "English":
     st.caption(

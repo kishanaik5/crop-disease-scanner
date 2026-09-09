@@ -6,20 +6,26 @@ so it is cached as a Streamlit resource and built only once per session.
 """
 from __future__ import annotations
 
+import threading
 from typing import List, Tuple
 
-import streamlit as st
 from PIL import Image
 
 from utils.config import MODEL_ID
 
+_lock = threading.Lock()
+_CLASSIFIER = None
 
-@st.cache_resource(show_spinner="Loading disease-detection model…")
+
 def get_classifier():
     """Build (once) and return the cached image-classification pipeline."""
-    from transformers import pipeline  # imported lazily so the app starts fast
-
-    return pipeline("image-classification", model=MODEL_ID)
+    global _CLASSIFIER
+    if _CLASSIFIER is None:
+        with _lock:
+            if _CLASSIFIER is None:
+                from transformers import pipeline
+                _CLASSIFIER = pipeline("image-classification", model=MODEL_ID)
+    return _CLASSIFIER
 
 
 def classify(image: Image.Image, top_k: int = 3) -> List[Tuple[str, float]]:
